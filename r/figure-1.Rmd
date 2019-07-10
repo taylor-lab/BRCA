@@ -1,0 +1,167 @@
+---
+title: "Figure 1"
+output: html_document
+chunk_output_type: console
+---
+
+```{r setup, include = FALSE, echo = FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, autodep = knitr::dep_prev())
+source(here::here('r/prerequisites.R'))
+```
+
+### Panel A
+
+The overall rate of germline and somatic _BRCA1_ and _BRCA2_ mutations. The somatic mutations are broken down variant type and somatic context.
+
+```{r Panel A}
+p1 = summarize(brca_tbl, 
+               Germline = sum(brca1_germline, brca2_germline)/sum(total),
+               Somatic = sum(brca1_somatic_lof, brca2_somatic_lof,
+                             brca1_somatic_del, brca2_somatic_del,
+                             brca1_somatic_lof_hm, brca2_somatic_lof_hm,
+                             brca1_somatic_vus, brca2_somatic_vus)/sum(total)) %>% 
+    gather(type, rate) %>% 
+    ggplot(., aes(x = type, y = rate)) +
+    geom_col() +
+    geom_text(aes(label = as_perc(signif(rate, 2))), vjust = -.5) +
+    scale_y_continuous(expand = c(0, 0), labels = as_perc, limits = c(0, .06)) +
+    labs(x = NULL, y = paste0('Percent of patients\n(n=', prettyNum(sum(brca_tbl$total), big.mark = ','), ')')) +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5))
+
+p2 = summarize(brca_tbl,
+               LoF = sum(brca1_somatic_lof, brca2_somatic_lof, brca1_somatic_del, brca2_somatic_del),
+               `LoF-hyper` = sum(brca1_somatic_lof_hm, brca2_somatic_lof_hm),
+               VUS = sum(brca1_somatic_vus, brca2_somatic_vus)) %>% 
+    gather(type, count) %>% 
+    mutate(type = fct_relevel(type, 'VUS', 'LoF-hyper', 'LoF')) %>% 
+    ggplot(., aes(x = (1), y = count, fill = type)) +
+        geom_col(position = 'fill') +
+    scale_y_continuous(expand = c(0, 0), labels = as_perc) + 
+    scale_fill_manual(values = c('LoF' = 'red3', 'LoF-hyper' = 'pink1', 'VUS' = 'grey85')) +
+    theme(axis.text.x = element_blank(),
+          axis.ticks.x = element_blank()) +
+    labs(x = NULL, y = '% of somatic\nmutations', fill = NULL)
+
+p3 = summarize(brca_tbl,
+               `SNV/indel` = sum(brca1_somatic_lof, brca2_somatic_lof),
+               Hom.del = sum(brca1_somatic_del, brca2_somatic_del)) %>% 
+    gather(type, count) %>% 
+    ggplot(., aes(x = (1), y = count, fill = type)) +
+        geom_col(position = 'fill') +
+    scale_y_continuous(expand = c(0, 0), labels = as_perc) + 
+    scale_fill_manual(values = c('SNV/indel' = 'springgreen4', 'Hom.del' = 'mediumaquamarine')) +
+    theme(axis.text.x = element_blank(),
+          axis.ticks.x = element_blank()) +
+    labs(x = NULL, y = '% of somatic LoF', fill = NULL)
+
+p1 + p2 + p3 + plot_layout(nrow = 1, widths = c(2, 1, 1))
+```
+
+### Panel B
+
+The distribution of _BRCA_-mutated cases across BRCA- versus non BRCA-associated cancer types. Raw data not provided.
+
+```{r Panel B}
+group_by(brca_tbl, type = ifelse(cancer_type %in% brca_associated, 'BRCA-associated', 'Other')) %>% 
+    summarize(n = sum(brca1_germline, brca2_germline,
+                      brca1_somatic_lof, brca2_somatic_lof,
+                      brca1_somatic_del, brca2_somatic_del)) %>% 
+    mutate(type = fct_relevel(type, 'Other')) %>% 
+    ggplot(., aes(x = (1), y = n, fill = type)) + 
+    geom_col(position = 'fill') + 
+    scale_y_continuous(expand = c(0, 0), labels = as_perc, breaks = seq(0, 1, .2)) +
+    scale_fill_manual(values = c('BRCA-associated' = 'dodgerblue3', 'Other' = 'skyblue2')) +
+    labs(x = NULL, y = expression(atop('Percent of ' * italic('BRCA1/2-'), 'mutant patients')), fill = NULL) +
+    theme(axis.text.x = element_blank(),
+          axis.ticks.x = element_blank(),
+          aspect.ratio = 6) 
+```
+
+### Panel C 
+
+Overview of _BRCA1/2_ mutation across cancer types by gene and mutation type.
+
+```{r Panel C}
+mutation_type_tbl = group_by(brca_tbl, cancer_type, total) %>%
+    summarize(BRCA1 = sum(brca1_germline, brca1_somatic_lof, brca1_somatic_del),
+              BRCA2 = sum(brca2_germline, brca2_somatic_lof, brca2_somatic_del)) %>%
+    ungroup() %>% 
+    gather(gene, count, -cancer_type, -total) %>%
+    mutate(frac = count/total,
+           upper = ci_upper(count, total),
+           lower = ci_lower(count, total)) 
+
+p1 = group_by(mutation_type_tbl, cancer_type) %>%
+    filter(total >= 50 & any(count > 0)) %>%
+    ungroup() %>%
+    ggplot(., aes(x = reorder(cancer_type, -frac, sum), y = frac, color = gene)) +
+    geom_point(position = position_dodge(width = .5), size = as_pts(3)) +
+    scale_y_continuous(labels = as_perc) +
+    geom_linerange(aes(ymax = upper, ymin = lower),
+                   position = position_dodge(width = .5), size = as_pts(1)) +
+    scale_color_manual(values = c('BRCA1' = 'dodgerblue3', 'BRCA2' = 'pink2')) +
+    labs(y = 'Percent of patients', x = NULL, color = NULL) +
+    theme(legend.position = c(1, 1),
+          legend.justification = c(1, 1),
+          legend.background = element_blank(),
+          axis.text.x = element_blank(), axis.ticks.x = element_blank()) 
+
+ct_order = p1$data %>%
+    group_by(cancer_type) %>%
+    summarize(frac = sum(frac)) %>%
+    arrange(desc(frac))
+
+variant_class_tbl = filter(brca_tbl, cancer_type %in% ct_order$cancer_type) %>%
+    group_by(cancer_type, total) %>%
+    summarize(`Germline P/LP` = sum(brca1_germline, brca2_germline),
+              `Somatic LoF mutation` = sum(brca1_somatic_lof, brca2_somatic_lof),
+              `Somatic deletion` = sum(brca1_somatic_lof, brca2_somatic_del)) %>%
+    ungroup() %>% 
+    gather(type, count, -total, -cancer_type) %>%
+    mutate(frac = count/total,
+           cancer_type = fct_relevel(cancer_type, ct_order$cancer_type),
+           type = fct_relevel(type, 'Somatic deletion', 'Somatic LoF mutation', 'Germline P/LP'))
+
+p2 = ggplot(variant_class_tbl, aes(x = cancer_type, y = frac, fill = type)) +
+    geom_col(position = 'fill') +
+    scale_y_continuous(expand = c(0, 0), labels = as_perc) +
+    scale_fill_manual(values = c('Germline P/LP' = 'gray15', 'Somatic LoF mutation' = 'gray55', 'Somatic deletion' = 'gray95')) +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
+    labs(x = NULL, y = '% of mutations', fill = NULL)
+
+p3 = filter(brca_tbl, cancer_type %in% ct_order$cancer_type) %>%
+    mutate(cancer_type = fct_relevel(cancer_type, ct_order$cancer_type)) %>%
+    ggplot(., aes(x = cancer_type, y = total)) +
+    geom_col() +
+    scale_y_continuous(expand = c(0, 0), limits = c(0, 2700)) +
+    theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
+    labs(x = NULL, y = 'Patients', fill = NULL)
+
+p3 + p1 + p2 + plot_layout(ncol = 1, heights = c(1, 4, 1))
+```
+
+### Panel D
+
+X-Y plot of the overall germline and somatic mutation rates per cancer type.
+
+```{r Panel D}
+gml_som_tbl = filter(brca_tbl, total >= 5) %>% 
+    group_by(cancer_type, total) %>% 
+    summarize(germline = sum(brca1_germline, brca2_germline),
+              somatic = sum(brca1_somatic_lof, brca2_somatic_lof, brca1_somatic_del, brca2_somatic_del)) %>% 
+    mutate(germline = germline/total,
+           somatic = somatic/total) 
+
+select_cts = c(brca_associated, 'Uterine Sarcoma', 'Penile Cancer', 'Ampullary Carcinoma', 'Skin Cancer, Non-Melanoma')
+
+ggplot(gml_som_tbl, aes(y = germline, x = somatic, size = total)) +
+    geom_abline(slope = 1, intercept = 0, linetype = 'dashed', color = 'darkgrey', size = theme_get()$line$size) +
+    geom_point(shape = 21, color = 'black', stroke = theme_get()$line$size, fill = 'lightgrey') +
+    scale_size(breaks = c(100, 500, 1000, 2000), range = c(0, 5)) +
+    scale_x_continuous(limits = c(0, .12), breaks = seq(0, .1, .02), labels = as_perc) +
+    scale_y_continuous(limits = c(0, .12), breaks = seq(0, .1, .02), labels = as_perc) +
+    geom_text_repel(data = filter(gml_som_tbl, cancer_type %in% select_cts),
+                    aes(label = cancer_type), size = as_pts(8), point.padding = as_pts(1)) +
+    theme(aspect.ratio = 1) +
+    labs(y = '% germline mutated', x = '% somatic mutated', size = 'N', fill = 'Significant')
+```

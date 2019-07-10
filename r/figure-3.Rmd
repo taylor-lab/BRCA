@@ -1,0 +1,144 @@
+---
+title: "Figure 3"
+output: html_document
+---
+
+```{r setup, include = FALSE, echo = FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, autodep = knitr::dep_prev())
+source(here::here('r/prerequisites.R'))
+```
+
+### Panel A
+
+Breakdown of distribution of composite HRD score across basic categories of _BRCA1/2_ status.
+
+```{r Panel A}
+wes_tbl = mutate(wes_tbl, setA = case_when(
+    hrd_wt == TRUE ~ 'WT',
+    somatic == TRUE & hypermutated != 'No' ~ 'Hypermutated',
+    (germline == TRUE | somatic == TRUE) & brca_associated == TRUE ~ 'BRCA-assoc.',
+    (germline == TRUE | somatic == TRUE) & brca_associated == FALSE ~ 'Other'),
+    setA = fct_relevel(setA, c('WT', 'BRCA-assoc.', 'Other', 'Hypermutated')))
+
+filter(wes_tbl, !is.na(setA)) %>% 
+    ggplot(., aes(x = setA, y = hrd_score)) +
+    geom_quasirandom(shape = 16, size = .75, alpha = .75, aes(color = setA)) +
+    stat_summary(fun.y = median,
+                 fun.ymin = function(x) quantile(x, .25),
+                 fun.ymax = function(x) quantile(x, .75),
+                 geom = 'errorbar', size = theme_get()$line$size) +
+    stat_summary_bin(geom = 'point', fun.y = 'median', shape = 21, color = 'black', fill = 'white') +
+    scale_color_manual(values = c('grey75', rep('grey15', 3))) +
+    scale_y_continuous(limits = c(-1, 4), breaks = seq(-1, 4)) +
+    labs(x = NULL, y = 'Composite HRD score') +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5),
+          legend.position = 'none',
+          aspect.ratio = 3)
+```
+
+### Panel B
+
+Breakdown of distribution of composite HRD score across zygosity classes.
+
+```{r Panel B}
+wes_tbl = mutate(wes_tbl, setB = case_when(
+                      setA == 'WT' ~ 'WT',
+                      germline == TRUE & somatic_brca_zygosity == 'Biallelic' & hypermutated == 'No' ~ 'Germline biallelic',
+                      germline == TRUE & somatic_brca_zygosity == 'Heterozygous' & hypermutated == 'No' ~ 'Germline heterozygous',
+                      somatic == TRUE & somatic_brca_zygosity == 'Biallelic' & hypermutated == 'No' ~ 'Somatic biallelic',
+                      somatic == TRUE & somatic_brca_zygosity == 'Heterozygous' & hypermutated == 'No' ~ 'Somatic heterozygous'),
+                  setB = fct_relevel(setB, c('WT', 'Germline heterozygous', 'Germline biallelic',
+                                        'Somatic heterozygous', 'Somatic biallelic')))
+
+filter(wes_tbl, !is.na(setB)) %>% 
+    ggplot(., aes(x = setB, y = hrd_score)) +
+    geom_quasirandom(shape = 16, size = .75, alpha = .75, aes(color = setB)) +
+    stat_summary(fun.y = median,
+                 fun.ymin = function(x) quantile(x, .25),
+                 fun.ymax = function(x) quantile(x, .75),
+                 geom = 'errorbar', size = theme_get()$line$size) +
+    stat_summary_bin(geom = 'point', fun.y = 'median', shape = 21, color = 'black', fill = 'white') +
+    scale_color_manual(values = c('grey75', rep(c('mediumaquamarine', 'springgreen4'), 2))) +
+    scale_y_continuous(limits = c(-1, 4), breaks = seq(-1, 4)) +
+    labs(x = NULL, y = 'Composite HRD score') +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5),
+          legend.position = 'none',
+          aspect.ratio = 1.75)
+```
+
+### Panel C
+
+Breakdown of distribution of composite HRD score across zygosity classes and cancer type.
+
+```{r Panel C}
+wes_tbl = mutate(wes_tbl,
+                 setC = case_when(
+                     setB == 'WT' ~ 'WT',
+                     brca_associated == TRUE & !is.na(setB) ~ paste0(setB, ', BRCA-assoc.'),
+                     brca_associated == FALSE & !is.na(setB) ~ paste0(setB, ', other')),
+                 setC = fct_relevel(setC, c('WT',
+                                            'Germline heterozygous, other', 'Somatic heterozygous, other',
+                                            'Germline biallelic, other', 'Somatic biallelic, other',
+                                            'Germline heterozygous, BRCA-assoc.', 'Somatic heterozygous, BRCA-assoc.',
+                                            'Germline biallelic, BRCA-assoc.', 'Somatic biallelic, BRCA-assoc.')))
+
+filter(wes_tbl, !is.na(setC)) %>% 
+    ggplot(., aes(x = setC, y = hrd_score)) +
+    geom_quasirandom(shape = 16, size = .75, alpha = .75, aes(color = setC)) +
+    stat_summary(fun.y = median,
+                 fun.ymin = function(x) quantile(x, .25),
+                 fun.ymax = function(x) quantile(x, .75),
+                 geom = 'errorbar', size = theme_get()$line$size) +
+    stat_summary_bin(geom = 'point', fun.y = 'median', shape = 21, color = 'black', fill = 'white') +
+        scale_color_manual(values = c('grey75', rep(c('mediumaquamarine', 'mediumaquamarine', 'springgreen4', 'springgreen4'), 2))) +
+    scale_y_continuous(limits = c(-1, 4), breaks = seq(-1, 4)) +
+    labs(x = NULL, y = 'Composite HRD score') +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5),
+          legend.position = 'none',
+          aspect.ratio = .75)
+```
+
+### Panel D
+
+Mutational signatures in tumors with somatic mutations.
+_Not all data provided for Panel D._
+
+```{r Panel D}
+select_samples = c("P-0005313-T02-WES", "P-0006008-T02-WES", "P-0012325-T02-WES", "P-0020673-T01-WES",
+                   "P-0021715-T01-WES", "P-0022244-T01-WES", "P-0004056-T01-WES", "P-0009962-T01-WES",
+                   "P-0011567-T02-WES", "P-0017068-T01-WES", "P-0002682-T01-WES", "P-0008355-T01-WES",
+                   "P-0020668-T01-WES", "P-0006297-T01-WES", "P-0012241-T02-WES", "P-0009660-T01-WES",
+                   "P-0011185-T01-WES", "P-0021100-T01-WES", "P-0017842-T02-WES", "P-0008419-T01-WES",
+                   "P-0008466-T01-WES", "P-0010249-T01-WES", "P-0001756-T01-WES", "P-0017006-T01-WES",
+                   "P-0015415-T01-WES")
+
+add_brca_signature = filter(wes_tbl, sample %in% select_samples) %>% 
+    select(sample, somatic_brca_zygosity, frac = signature3) %>% 
+    mutate(signature = 'BRCA',
+           frac = as.numeric(frac))
+
+filter(wes_tbl, sample %in% select_samples) %>% 
+    separate_rows(other_signatures, sep = '\\,') %>% 
+    mutate(signature = str_replace(str_extract(other_signatures, '.*(?=\\:)'), 'signature_', ''),
+           frac = as.numeric(str_extract(other_signatures, '(?<=\\:).*'))) %>% 
+    mutate(signature = ifelse(frac < .2 | signature %nin% setdiff(names(sign_colors), 'Other'), 'Other', signature)) %>% 
+    bind_rows(., add_brca_signature) %>% 
+    group_by(sample, somatic_brca_zygosity, signature) %>% 
+    summarize(frac = sum(frac)) %>%
+    group_by(sample) %>% 
+    mutate(frac = ifelse(signature == 'Other', 1-sum(frac[signature!='Other']), frac)) %>% 
+    ungroup() %>% 
+    filter(frac >= 0) %>% 
+    mutate(sample = fct_relevel(sample, select_samples),
+           somatic_brca_zygosity = fct_rev(somatic_brca_zygosity),
+           signature = fct_relevel(signature, rev(names(sign_colors)))) %>% 
+    ggplot(., aes(x = sample, y = frac, fill = signature)) +
+    geom_col() +
+    scale_y_continuous(expand = c(0, 0), limits = c(0, 1), labels = function(x) 100*x) +
+    scale_fill_manual(values = sign_colors, '') +
+    facet_grid(.~somatic_brca_zygosity, scales = 'free_x', space = 'free_x') +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5, size = 8),
+          strip.text.x = element_blank()) +
+    labs(x = '', y = '% mutational burden')
+```
+

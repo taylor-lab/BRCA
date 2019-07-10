@@ -1,0 +1,124 @@
+---
+title: "Figure 2"
+output: html_document
+---
+
+```{r setup, include = FALSE, echo = FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, autodep = knitr::dep_prev())
+source(here::here('r/prerequisites.R'))
+```
+
+### Panel A
+
+The overall rate of biallelic loss in different classes of _BRCA1/2_-mutated tumors. The denominator in this table excludes cases with indeterminate tumor zygosity.
+Background rates and TP53 data not provided.
+
+```{r Panel A}
+tribble(
+    ~set, ~total, ~loh,
+    'Germline P/LP', sum(brca_tbl$germline_total_evaluable, na.rm = T), sum(brca_tbl$germline_loh, na.rm = T),
+    'Germline P/LP (any)', sum(brca_tbl$germline_total_evaluable, na.rm = T), sum(brca_tbl$germline_loh, na.rm = T)+sum(brca_tbl$germline_second_somatic, na.rm = T),
+    'Somatic LoF', sum(brca_tbl$somatic_lof_total_evaluable, na.rm = T), sum(brca_tbl$somatic_lof_loh, na.rm = T),
+    'Somatic LoF (hyperm.)', sum(brca_tbl$somatic_lof_hm_total_evaluable, na.rm = T), sum(brca_tbl$somatic_lof_hm_loh, na.rm = T)
+) %>% 
+    mutate(frac = loh/total,
+           upper = ci_upper(loh, total),
+           lower = ci_lower(loh, total)) %>% 
+    ggplot(., aes(x = set, y = frac, ymin = lower, ymax = upper)) +
+    geom_pointrange(position = position_dodge(width = .5), size = as_points(2), fatten = 4) +
+    scale_y_continuous(expand = c(0, 0), limits = c(0, 1), labels = function(x) 100*x) +
+    labs(x = NULL, y = '% LOH', fill = NULL) +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5),
+          aspect.ratio = 1.25)
+```
+
+### Panel B
+
+Rate of LOH in germline-mutated cases in select tumor types. Background rates not provided.
+
+```{r Panel B}
+select_cts = c('Breast Cancer', 'Ovarian Cancer', 'Pancreatic Cancer', 'Prostate Cancer',
+               'Non-Small Cell Lung Cancer', 'Bladder Cancer', 'Melanoma', 'Colorectal Cancer')
+
+filter(brca_tbl, cancer_type %in% select_cts) %>% 
+    mutate(frac = germline_loh/germline_total_evaluable,
+           upper = ci_upper(germline_loh, germline_total_evaluable),
+           lower = ci_lower(germline_loh, germline_total_evaluable),
+           cancer_type = fct_relevel(cancer_type, select_cts)) %>% 
+    ggplot(., aes(x = cancer_type, y = frac, ymin = lower, ymax = upper)) +
+    geom_pointrange(position = position_dodge(width = .5), size = as_points(2), fatten = 4) +
+    scale_y_continuous(expand = c(0, 0), limits = c(0, 1), labels = function(x) 100*x) +
+    labs(x = NULL, y = '% LOH', color = NULL) +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5),
+          legend.position = c(1, 1),
+          legend.justification = c(1, 1),
+          aspect.ratio = .8)
+```
+
+### Panel C
+
+The rate of biallelic loss among patients with germline- or somatic-mutated tumors. 
+
+```{r Panel C}
+bi_tbl = group_by(brca_tbl, cancer_type = ifelse(total_brca < 10, 'Other', cancer_type)) %>% 
+    summarize(total_brca_germline = sum(total_brca_germline),
+              total_brca_somatic = sum(total_brca_somatic),
+              `Homozygous deletion` = sum(brca1_somatic_del, brca2_somatic_del, na.rm = T),
+              `Somatic LoF + LOH` = sum(somatic_lof_loh, na.rm = T),
+              `Germline + somatic` = sum(germline_second_somatic, na.rm = T),
+              `Germline + LOH` = sum(germline_loh, na.rm = T)) 
+
+p1 = gather(bi_tbl, type, count, -cancer_type, -total_brca_germline, -total_brca_somatic) %>% 
+    mutate(type = fct_relevel(type, 'Homozygous deletion', 'Somatic LoF + LOH', 'Germline + somatic', 'Germline + LOH'),
+           cancer_type = fct_reorder(cancer_type, -count, sum),
+           cancer_type = fct_relevel(cancer_type, 'Other', after = Inf)) %>% 
+    ggplot(., aes(x = cancer_type, y = count, fill = type)) +
+    geom_col() +
+    scale_fill_manual(values = c('Homozygous deletion' = 'gray15', 'Somatic LoF + LOH' = 'gray55',
+                                 'Germline + somatic' = 'gray75', 'Germline + LOH' = 'gray95')) +
+    scale_y_continuous(expand = c(0, 0), limits = c(0, 135), breaks = c(0, 25, 75, 125)) +
+    labs(x = NULL, y = 'Samples', fill = NULL) +
+    theme(axis.text.x = element_blank(),
+          axis.ticks.x = element_blank())
+
+ct_order = group_by(p1$data, cancer_type) %>%
+    summarize(total = sum(count)) %>%
+    arrange(desc(total))
+
+totals = mutate(brca_tbl, cancer_type = ifelse(cancer_type %in% ct_order$cancer_type, cancer_type, 'Other')) %>% 
+    group_by(cancer_type) %>% 
+    summarize(Germline = sum(germline_total_evaluable, na.rm = T),
+              Somatic = sum(somatic_lof_total_evaluable, na.rm = T) +
+                        sum(brca1_somatic_del, na.rm = T) +
+                        sum(brca2_somatic_del, na.rm = T)) %>% 
+    gather(source, total, -cancer_type) 
+
+p2 = mutate(brca_tbl, cancer_type = ifelse(cancer_type %in% ct_order$cancer_type, cancer_type, 'Other')) %>% 
+    group_by(cancer_type) %>% 
+    summarize(Germline = sum(germline_loh, na.rm = T) +
+                         sum(germline_second_somatic, na.rm = T),
+              Somatic = sum(somatic_lof_loh, na.rm = T) +
+                        sum(brca1_somatic_del, na.rm = T) +
+                        sum(brca2_somatic_del, na.rm = T)) %>% 
+    gather(source, count, -cancer_type) %>% 
+    left_join(., totals) %>% 
+    mutate(frac = count/total,
+           upper = ci_upper(count, total),
+           lower = ci_lower(count, total),
+           cancer_type = fct_relevel(cancer_type, as.character(ct_order$cancer_type)),
+           cancer_type = fct_relevel(cancer_type, 'Other', after = Inf)) %>%
+    ggplot(., aes(x = cancer_type, y = frac, ymin = lower, ymax = upper, color = source)) +
+    geom_pointrange(position = position_dodge(width = .5), size = theme_get()$line$size, fatten = 4, shape = 16) +
+    scale_color_manual(values = c('Germline' = 'blue3', 'Somatic' = 'red3')) +
+    scale_y_continuous(labels = as_perc, limits = c(0, 1)) +
+    labs(x = NULL, y = '% biallelic loss', color = NULL) +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5))
+
+    
+p1 + p2 + plot_layout(ncol = 1, heights = c(1, 2))
+```
+
+$~$
+
+_Data for Panel D not provided._
+

@@ -1,0 +1,37 @@
+---
+title: "Figure 4"
+output: html_document
+---
+
+```{r setup, include = FALSE, echo = FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, autodep = knitr::dep_prev())
+source(here::here('r/prerequisites.R'))
+```
+
+### Panels A, B
+
+Time on PARPi by BRCA mutation status and cancer type.
+
+```{r Panel A, B}
+fit1 = survfit(Surv(parpi_tx_months, parpi_tx_status) ~ brca_class, filter(parpi_tx, brca_associated == TRUE))
+p1 = ggsurvplot(fit1, xlim = c(0, 12))$plot
+
+fit2 = survfit(Surv(parpi_tx_months, parpi_tx_status) ~ brca_class, filter(parpi_tx, brca_associated == FALSE))
+p2 = ggsurvplot(fit2, xlim = c(0, 12))$plot
+
+fit3 = survfit(Surv(parpi_tx_months, parpi_tx_status) ~ germline_somatic_class, filter(parpi_tx, brca_associated == TRUE))
+p3 = ggsurvplot(fit3, xlim = c(0, 12))$plot
+
+p1 + p2 + p3
+```
+
+### Panel D
+
+Response to immunecheckpoint blockade.
+
+```{r Panel D}
+fit1 = survfit(Surv(immuno_tx_efs_months, immuno_tx_efs_status) ~ brca_class, icb_tx)
+ggsurvplot(fit1, xlim = c(0, 36))$plot 
+```
+
+
